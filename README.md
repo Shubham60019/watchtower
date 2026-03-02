@@ -4,8 +4,7 @@ Monitor, inspect, and debug all API traffic between AI coding agents and their A
 
 > Like Chrome DevTools Network tab, but for Claude Code and Codex CLI.
 
-<!-- TODO: Add screenshot of dashboard here -->
-<!-- ![Dashboard](docs/screenshot.png) -->
+![Watchtower Dashboard](docs/screenshot.png)
 
 ## Why
 
