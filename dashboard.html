@@ -1,0 +1,1832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Code Interceptor</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --bg-card: #12121a;
+    --bg-hover: #1a1a28;
+    --bg-panel: #0e0e16;
+    --border: #1e1e30;
+    --border-active: #3b3b5c;
+    --text: #e0e0e8;
+    --text-dim: #6e6e8a;
+    --text-label: #9090ab;
+    --accent: #7c6aef;
+    --accent-dim: #5a4bc7;
+    --green: #4ade80;
+    --green-dim: #166534;
+    --yellow: #fbbf24;
+    --yellow-dim: #713f12;
+    --red: #f87171;
+    --red-dim: #7f1d1d;
+    --cyan: #22d3ee;
+    --orange: #fb923c;
+    --pink: #f472b6;
+    --mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+  }
+
+  /* ── Layout ────────────────────────────────────────── */
+  .app {
+    display: grid;
+    grid-template-rows: 48px 1fr;
+    grid-template-columns: 340px 1fr;
+    height: 100vh;
+  }
+
+  .header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    gap: 16px;
+  }
+
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .logo { font-weight: 700; font-size: 14px; letter-spacing: -0.02em; }
+  .logo span { color: var(--accent); }
+
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--red);
+    transition: background 0.3s;
+  }
+  .status-dot.connected { background: var(--green); animation: pulse 2s infinite; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .header-stats {
+    display: flex; gap: 20px; font-size: 12px; color: var(--text-dim);
+    font-family: var(--mono);
+  }
+  .header-stats .val { color: var(--text); font-weight: 600; }
+
+  /* ── Sidebar ────────────────────────────────────────── */
+  .sidebar {
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-panel);
+  }
+
+  .sidebar-header {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .request-list {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .request-item {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.15s;
+    position: relative;
+  }
+  .request-item:hover { background: var(--bg-hover); }
+  .request-item.active { background: var(--bg-hover); border-left: 3px solid var(--accent); }
+
+  .req-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .req-id { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+  .req-badge {
+    font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 3px;
+    text-transform: uppercase; letter-spacing: 0.05em; font-family: var(--mono);
+  }
+  .badge-messages_stream { background: var(--accent-dim); color: #e0d4ff; }
+  .badge-quota_check { background: var(--yellow-dim); color: var(--yellow); }
+  .badge-token_count { background: var(--green-dim); color: var(--green); }
+  .badge-messages { background: #1e3a5f; color: var(--cyan); }
+  .badge-unknown { background: #333; color: #999; }
+
+  .req-model { font-size: 12px; font-weight: 600; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .req-meta { font-size: 10px; color: var(--text-dim); font-family: var(--mono); display: flex; gap: 8px; }
+
+  .req-streaming {
+    position: absolute; top: 10px; right: 12px;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green);
+    animation: pulse 1s infinite;
+  }
+
+  /* ── Agent hierarchy indentation ──────────────────── */
+  .request-item.subagent {
+    padding-left: 28px;
+    border-left: 2px solid var(--accent-dim);
+    margin-left: 12px;
+    background: rgba(124, 106, 239, 0.03);
+  }
+  .request-item.subagent:hover { background: rgba(124, 106, 239, 0.08); }
+  .request-item.subagent.active { border-left: 3px solid var(--accent); margin-left: 11px; }
+
+  .request-item.utility-child {
+    padding-left: 28px;
+    border-left: 2px solid var(--border);
+    margin-left: 12px;
+    opacity: 0.7;
+  }
+  .request-item.utility-child:hover { opacity: 1; }
+
+  .agent-role-tag {
+    font-size: 8px; font-weight: 700; padding: 1px 4px; border-radius: 2px;
+    text-transform: uppercase; letter-spacing: 0.05em; font-family: var(--mono);
+    margin-left: 4px;
+  }
+  .agent-role-tag.main { background: #1a3a1a; color: var(--green); }
+  .agent-role-tag.subagent { background: #1e1040; color: #b4a0ff; }
+  .agent-role-tag.utility { background: #1a1a1a; color: var(--text-dim); }
+
+  /* ── Main panel ────────────────────────────────────── */
+  .main {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+    flex-shrink: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    gap: 1px;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+
+  .tab {
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-dim);
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    user-select: none;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .tab:hover { color: var(--text); background: var(--bg-hover); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab .count {
+    font-family: var(--mono);
+    font-size: 9px;
+    background: var(--border);
+    padding: 1px 4px;
+    border-radius: 8px;
+    margin-left: 4px;
+  }
+  .tab-sep {
+    flex-shrink: 0;
+    width: 1px;
+    background: var(--border);
+    margin: 6px 0;
+  }
+
+  .tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-dim);
+    font-size: 14px;
+    gap: 8px;
+  }
+  .empty-state code {
+    font-family: var(--mono);
+    background: var(--bg-card);
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--yellow);
+  }
+
+  /* ── Content sections ──────────────────────────────── */
+  .section {
+    margin-bottom: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .section-header {
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-label);
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+  }
+  .section-header:hover { background: var(--bg-hover); }
+  .section-header .toggle { font-size: 10px; color: var(--text-dim); }
+
+  .section-body { padding: 12px 14px; }
+  .section-body.collapsed { display: none; }
+
+  .json-block {
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 500px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  /* ── Messages ──────────────────────────────────────── */
+  .message {
+    margin-bottom: 12px;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+
+  .message-header {
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .message.user .message-header { background: #1a2332; color: var(--cyan); }
+  .message.assistant .message-header { background: #1f1a2e; color: var(--accent); }
+
+  .message-body {
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  /* ── Tool definitions ──────────────────────────────── */
+  .tools-container { display: flex; flex-direction: column; gap: 6px; }
+
+  .tools-group-header {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    padding: 10px 0 4px 2px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .tools-group-header .group-count {
+    font-family: var(--mono);
+    font-size: 9px;
+    background: var(--border);
+    padding: 1px 6px;
+    border-radius: 8px;
+  }
+
+  .tool-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+  .tool-item:hover { border-color: var(--border-active); }
+
+  .tool-item-header {
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .tool-item-header:hover { background: var(--bg-hover); }
+
+  .tool-item-icon {
+    flex-shrink: 0;
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 800;
+    font-family: var(--mono);
+  }
+  .tool-item-icon.builtin { background: var(--green-dim); color: var(--green); }
+  .tool-item-icon.mcp { background: var(--accent-dim); color: #c4b5fd; }
+
+  .tool-item-info { flex: 1; min-width: 0; }
+
+  .tool-item-name {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--green);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tool-item.mcp-tool .tool-item-name { color: #c4b5fd; }
+
+  .tool-item-oneliner {
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 1px;
+  }
+
+  .tool-item-chevron {
+    flex-shrink: 0;
+    color: var(--text-dim);
+    font-size: 11px;
+    transition: transform 0.2s;
+  }
+  .tool-item.open .tool-item-chevron { transform: rotate(90deg); }
+
+  .tool-item-detail {
+    display: none;
+    border-top: 1px solid var(--border);
+  }
+  .tool-item.open .tool-item-detail { display: block; }
+
+  .tool-detail-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-panel);
+  }
+  .tool-detail-tab {
+    padding: 6px 14px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    user-select: none;
+  }
+  .tool-detail-tab:hover { color: var(--text); }
+  .tool-detail-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .tool-detail-body {
+    padding: 14px;
+    max-height: 500px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  /* ── Markdown rendering ────────────────────────────── */
+  .md-rendered {
+    font-size: 12px;
+    line-height: 1.65;
+    color: var(--text);
+  }
+  .md-rendered h1, .md-rendered h2, .md-rendered h3, .md-rendered h4 {
+    color: var(--text);
+    margin: 14px 0 6px 0;
+    font-weight: 700;
+  }
+  .md-rendered h1 { font-size: 16px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  .md-rendered h2 { font-size: 14px; }
+  .md-rendered h3 { font-size: 12px; }
+  .md-rendered h4 { font-size: 11px; color: var(--text-label); }
+  .md-rendered p { margin: 6px 0; }
+  .md-rendered ul, .md-rendered ol { margin: 4px 0; padding-left: 20px; }
+  .md-rendered li { margin: 2px 0; }
+  .md-rendered code {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: var(--bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    color: var(--cyan);
+  }
+  .md-rendered pre {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin: 8px 0;
+    overflow-x: auto;
+  }
+  .md-rendered pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text);
+  }
+  .md-rendered strong { color: var(--text); font-weight: 700; }
+  .md-rendered em { font-style: italic; color: var(--text-label); }
+  .md-rendered blockquote {
+    border-left: 3px solid var(--accent);
+    padding-left: 12px;
+    margin: 8px 0;
+    color: var(--text-dim);
+  }
+  .md-rendered hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 12px 0;
+  }
+  .md-rendered a { color: var(--accent); text-decoration: none; }
+  .md-rendered a:hover { text-decoration: underline; }
+
+  .tool-param-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    font-family: var(--mono);
+  }
+  .tool-param-table th {
+    text-align: left;
+    padding: 6px 10px;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .tool-param-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .tool-param-table .param-name { color: var(--cyan); font-weight: 600; }
+  .tool-param-table .param-type { color: var(--orange); font-size: 10px; }
+  .tool-param-table .param-req { color: var(--red); font-size: 9px; font-weight: 700; }
+  .tool-param-table .param-desc { color: var(--text-dim); font-family: var(--sans); font-size: 11px; }
+
+  /* ── SSE events ────────────────────────────────────── */
+  .sse-event {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .sse-event:last-child { border-bottom: none; }
+
+  .sse-type {
+    flex-shrink: 0;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    text-transform: uppercase;
+  }
+  .sse-type.message_start { background: #1e3a5f; color: var(--cyan); }
+  .sse-type.message_stop { background: #1e3a5f; color: var(--cyan); }
+  .sse-type.message_delta { background: #1e3a5f; color: var(--cyan); }
+  .sse-type.content_block_start { background: var(--green-dim); color: var(--green); }
+  .sse-type.content_block_stop { background: var(--green-dim); color: var(--green); }
+  .sse-type.content_block_delta { background: var(--accent-dim); color: #c4b5fd; }
+  .sse-type.ping { background: #333; color: #666; }
+
+  .sse-data {
+    flex: 1;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text-dim);
+    max-height: 80px;
+    overflow: hidden;
+  }
+  .sse-event.expanded .sse-data { max-height: none; }
+
+  /* ── Rate limits ───────────────────────────────────── */
+  .rate-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 8px;
+  }
+
+  .rate-card {
+    padding: 10px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+
+  .rate-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .rate-value { font-family: var(--mono); font-size: 16px; font-weight: 700; }
+  .rate-bar { margin-top: 6px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .rate-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+
+  /* ── Key-value pairs ───────────────────────────────── */
+  .kv-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 12px;
+    font-size: 11px;
+  }
+  .kv-key { color: var(--text-label); font-family: var(--mono); text-align: right; white-space: nowrap; }
+  .kv-val { color: var(--text); font-family: var(--mono); word-break: break-all; }
+
+  /* ── System prompt ─────────────────────────────────── */
+  .system-block {
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 12px;
+    background: var(--bg-panel);
+    border-radius: 4px;
+    color: var(--text);
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .system-part {
+    margin-bottom: 12px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+  .system-part-label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .cache-badge {
+    font-size: 8px;
+    background: var(--accent-dim);
+    color: #c4b5fd;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  /* ── Content blocks from assistant ─────────────────── */
+  .content-block {
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .cb-header {
+    padding: 6px 10px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+  }
+  .cb-header.thinking { color: var(--orange); }
+  .cb-header.text { color: var(--green); }
+  .cb-header.tool_use { color: var(--pink); }
+  .cb-header.tool_result { color: var(--yellow); }
+
+  .cb-body {
+    padding: 8px 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  /* ── Rendered response ─────────────────────────────── */
+  .rendered-response { display: flex; flex-direction: column; gap: 12px; }
+
+  .resp-block {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .resp-block-header {
+    padding: 8px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+  }
+  .resp-block-header:hover { background: var(--bg-hover); }
+
+  .resp-block-header .block-index {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    background: var(--border);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+
+  .resp-block-header.type-thinking { color: var(--orange); border-left: 3px solid var(--orange); }
+  .resp-block-header.type-text { color: var(--green); border-left: 3px solid var(--green); }
+  .resp-block-header.type-tool_use { color: var(--pink); border-left: 3px solid var(--pink); }
+
+  .resp-block-body {
+    padding: 14px;
+    font-size: 13px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-y: auto;
+  }
+  .resp-block-body.collapsed { display: none; }
+
+  .resp-thinking-body {
+    color: var(--orange);
+    opacity: 0.85;
+    font-style: italic;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .resp-text-body {
+    color: var(--text);
+  }
+
+  .resp-tool-body {
+    padding: 0;
+  }
+
+  .tool-call-header {
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(244, 114, 182, 0.04);
+  }
+
+  .tool-call-name {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--pink);
+  }
+
+  .tool-call-id {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .tool-call-desc {
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 6px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-panel);
+    line-height: 1.4;
+  }
+
+  .tool-call-input {
+    padding: 12px 14px;
+  }
+
+  .tool-call-input-label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+
+  .resp-usage-bar {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .usage-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 14px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    min-width: 110px;
+  }
+
+  .usage-chip-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin-bottom: 2px;
+    text-align: center;
+  }
+
+  .usage-chip-value {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--orange);
+  }
+
+  .resp-stop-reason {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    background: var(--accent-dim);
+    color: #c4b5fd;
+  }
+
+  .resp-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  /* ── Thinking indicator ────────────────────────────── */
+  .thinking-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--orange);
+    font-size: 11px;
+    font-family: var(--mono);
+  }
+  .thinking-dots span {
+    display: inline-block;
+    width: 4px; height: 4px; border-radius: 50%;
+    background: var(--orange);
+    animation: dot-bounce 1.4s infinite;
+  }
+  .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes dot-bounce {
+    0%, 80%, 100% { opacity: 0.3; }
+    40% { opacity: 1; }
+  }
+
+  /* ── Scrollbar ─────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-active); }
+
+  /* ── Highlight tokens in JSON ──────────────────────── */
+  .json-key { color: var(--cyan); }
+  .json-string { color: var(--green); }
+  .json-number { color: var(--orange); }
+  .json-bool { color: var(--pink); }
+  .json-null { color: var(--text-dim); }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="status-dot" id="statusDot"></div>
+      <div class="logo"><span>Claude</span> Interceptor</div>
+    </div>
+    <div class="header-stats" id="headerStats">
+      <div>Requests: <span class="val" id="statReqs">0</span></div>
+      <div>SSE Events: <span class="val" id="statEvents">0</span></div>
+      <div>Uptime: <span class="val" id="statUptime">0s</span></div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <span>Requests</span>
+      <span id="reqCount">0</span>
+    </div>
+    <div class="request-list" id="requestList"></div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="tabs" id="tabBar"></div>
+    <div class="tab-content" id="tabContent">
+      <div class="empty-state">
+        <div>Waiting for requests...</div>
+        <code>ANTHROPIC_BASE_URL=http://localhost:8024 claude</code>
+        <div style="margin-top: 8px; font-size: 12px;">Run Claude Code with the env var above to start intercepting</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ──────────────────────────────────────────────────────────
+const state = {
+  requests: new Map(),
+  selectedId: null,
+  activeTab: 'overview',
+  ws: null,
+  connected: false,
+  startTime: Date.now(),
+  totalEvents: 0,
+};
+
+// ─── WebSocket ──────────────────────────────────────────────────────
+function connectWs() {
+  const ws = new WebSocket(`ws://${location.host}`);
+  ws.onopen = () => {
+    state.connected = true;
+    state.ws = ws;
+    document.getElementById('statusDot').classList.add('connected');
+    // Fetch existing requests
+    fetch('/api/requests').then(r => r.json()).then(list => {
+      for (const item of list) {
+        if (!state.requests.has(item.id)) {
+          state.requests.set(item.id, item);
+        }
+      }
+      renderSidebar();
+    });
+  };
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    handleWsMessage(msg);
+  };
+
+  ws.onclose = () => {
+    state.connected = false;
+    document.getElementById('statusDot').classList.remove('connected');
+    setTimeout(connectWs, 2000);
+  };
+}
+
+function handleWsMessage(msg) {
+  const { event, data } = msg;
+
+  if (event === 'request_start') {
+    state.requests.set(data.id, {
+      ...data,
+      status: null,
+      duration: null,
+      sseEvents: [],
+      sseEventCount: 0,
+      streaming: true,
+    });
+    renderSidebar();
+    if (state.selectedId === null) {
+      selectRequest(data.id);
+    }
+    if (state.selectedId === data.id) renderDetail();
+  }
+
+  if (event === 'agent_spawn') {
+    // Parent just emitted an Agent tool_use — retroactively link any
+    // subagent requests that arrived before this SSE event was processed.
+    // (In practice, subagents arrive AFTER the parent's stream ends,
+    //  so this is mainly for late-arriving data on page load.)
+    const parentReqId = data.parentId;
+    for (const [id, r] of state.requests) {
+      if (r.agentRole === 'subagent' && !r.parentId && id > parentReqId) {
+        r.parentId = parentReqId;
+      }
+    }
+    renderSidebar();
+  }
+
+  if (event === 'sse_event') {
+    const req = state.requests.get(data.requestId);
+    if (req) {
+      if (!req.sseEvents) req.sseEvents = [];
+      req.sseEvents.push(data);
+      req.sseEventCount = req.sseEvents.length;
+      state.totalEvents++;
+      if (state.selectedId === data.requestId && state.activeTab === 'stream') {
+        appendSseEvent(data);
+      }
+      if (state.selectedId === data.requestId && (state.activeTab === 'conversation' || state.activeTab === 'response')) {
+        renderDetail(); // Rebuild from SSE
+      }
+    }
+  }
+
+  if (event === 'request_end') {
+    const req = state.requests.get(data.id);
+    if (req) {
+      req.status = data.status || req.status;
+      req.duration = data.duration;
+      req.responseBody = data.responseBody;
+      req.rateLimits = data.rateLimits;
+      req.streaming = false;
+      req.error = data.error;
+      renderSidebar();
+      if (state.selectedId === data.id) renderDetail();
+    }
+  }
+
+  updateStats();
+}
+
+// ─── Sidebar render ─────────────────────────────────────────────────
+function renderSidebar() {
+  const list = document.getElementById('requestList');
+  const items = [...state.requests.values()].sort((a, b) => b.id - a.id);
+  document.getElementById('reqCount').textContent = items.length;
+  document.getElementById('statReqs').textContent = items.length;
+
+  list.innerHTML = items.map(r => {
+    const role = r.agentRole || 'utility';
+    const isChild = role === 'subagent' || (role === 'utility' && r.parentId);
+    const indentClass = role === 'subagent' ? 'subagent' : (isChild ? 'utility-child' : '');
+    const activeClass = state.selectedId === r.id ? 'active' : '';
+    const roleTag = role !== 'utility'
+      ? `<span class="agent-role-tag ${role}">${role}</span>`
+      : (r.parentId ? `<span class="agent-role-tag utility">util</span>` : '');
+
+    return `
+    <div class="request-item ${indentClass} ${activeClass}" onclick="selectRequest(${r.id})">
+      ${r.streaming ? '<div class="req-streaming"></div>' : ''}
+      <div class="req-top">
+        <span class="req-id">#${r.id}${roleTag}</span>
+        <span class="req-badge badge-${r.type}">${r.type.replace('_', ' ')}</span>
+      </div>
+      <div class="req-model">${r.model || 'unknown'}</div>
+      <div class="req-meta">
+        <span>${r.status || '...'}</span>
+        <span>${r.duration ? r.duration + 'ms' : 'streaming...'}</span>
+        ${r.sseEventCount ? '<span>' + r.sseEventCount + ' events</span>' : ''}
+      </div>
+    </div>
+  `}).join('');
+}
+
+// ─── Select request ─────────────────────────────────────────────────
+function selectRequest(id) {
+  state.selectedId = id;
+  state.activeTab = 'overview';
+  renderSidebar();
+
+  // Fetch full detail
+  fetch(`/api/request/${id}`).then(r => r.json()).then(detail => {
+    const existing = state.requests.get(id);
+    state.requests.set(id, { ...existing, ...detail });
+    renderDetail();
+  }).catch(() => renderDetail());
+}
+
+// ─── Render detail panel ────────────────────────────────────────────
+function renderDetail() {
+  const req = state.requests.get(state.selectedId);
+  if (!req) return;
+
+  const tabs = getTabs(req);
+  renderTabs(tabs);
+  renderTabContent(req);
+}
+
+function getTabs(req) {
+  const hasSSE = req.sseEvents?.length > 0 || req.streaming;
+  const tabs = [];
+
+  // Primary
+  tabs.push({ id: 'overview', label: 'Overview' });
+  tabs.push({ id: 'headers', label: 'Headers' });
+  if (req.rateLimits && Object.keys(req.rateLimits).length) tabs.push({ id: 'ratelimits', label: 'Limits' });
+
+  tabs.push({ sep: true });
+
+  // Content
+  if (req.system) tabs.push({ id: 'system', label: 'System', count: Array.isArray(req.system) ? req.system.length : 1 });
+  if (hasSSE) tabs.push({ id: 'response', label: 'Response' });
+  tabs.push({ id: 'conversation', label: 'Messages', count: req.messages?.length || 0 });
+  if (req.tools?.length) tabs.push({ id: 'tools', label: 'Tools', count: req.tools.length });
+
+  tabs.push({ sep: true });
+
+  // Debug
+  if (hasSSE) tabs.push({ id: 'stream', label: 'SSE', count: req.sseEvents?.length || 0 });
+  tabs.push({ id: 'raw', label: 'Raw' });
+
+  return tabs;
+}
+
+function renderTabs(tabs) {
+  const bar = document.getElementById('tabBar');
+  bar.innerHTML = tabs.map(t => {
+    if (t.sep) return '<div class="tab-sep"></div>';
+    return `<div class="tab ${state.activeTab === t.id ? 'active' : ''}" onclick="switchTab('${t.id}')">
+      ${t.label}${t.count !== undefined ? '<span class="count">' + t.count + '</span>' : ''}
+    </div>`;
+  }).join('');
+}
+
+function switchTab(id) {
+  state.activeTab = id;
+  renderDetail();
+}
+
+function renderTabContent(req) {
+  const el = document.getElementById('tabContent');
+
+  switch (state.activeTab) {
+    case 'overview': el.innerHTML = renderOverview(req); break;
+    case 'response': el.innerHTML = renderResponse(req); break;
+    case 'conversation': el.innerHTML = renderConversation(req); break;
+    case 'system': el.innerHTML = renderSystem(req); break;
+    case 'tools': el.innerHTML = renderTools(req); break;
+    case 'stream': el.innerHTML = renderStream(req); break;
+    case 'headers': el.innerHTML = renderHeaders(req); break;
+    case 'ratelimits': el.innerHTML = renderRateLimits(req); break;
+    case 'raw': el.innerHTML = renderRaw(req); break;
+    default: el.innerHTML = '';
+  }
+}
+
+// ─── Tab: Overview ──────────────────────────────────────────────────
+function renderOverview(req) {
+  // ── Request info ──
+  const info = [
+    ['Request ID', `#${req.id}`],
+    ['Type', req.type],
+    ['Method', req.method],
+    ['URL', req.url],
+    ['Model', req.model || 'n/a'],
+    ['Max Tokens', req.maxTokens || 'n/a'],
+    ['Status', req.status || 'streaming...'],
+    ['Duration', req.duration ? req.duration + 'ms' : 'in progress'],
+    ['Stream', req.stream ? 'Yes' : 'No'],
+    ['SSE Events', req.sseEvents?.length || 0],
+    ['Messages', req.messages?.length || 0],
+    ['Tools', req.tools?.length || 0],
+  ];
+
+  if (req.thinking) info.push(['Thinking', JSON.stringify(req.thinking)]);
+  if (req.contextManagement) info.push(['Context Mgmt', JSON.stringify(req.contextManagement)]);
+  if (req.metadata?.user_id) info.push(['User ID', req.metadata.user_id]);
+
+  let html = `<div class="section"><div class="section-header">Request Info</div><div class="section-body"><div class="kv-grid">`;
+  for (const [k, v] of info) {
+    html += `<div class="kv-key">${k}</div><div class="kv-val">${esc(String(v))}</div>`;
+  }
+  html += `</div></div></div>`;
+
+  // ── API headers (important fields) ──
+  const apiHeaders = [];
+  const rh = req.requestHeaders || {};
+  if (rh['anthropic-version']) apiHeaders.push(['anthropic-version', rh['anthropic-version']]);
+  if (rh['anthropic-beta']) apiHeaders.push(['anthropic-beta', rh['anthropic-beta']]);
+  if (rh['user-agent']) apiHeaders.push(['user-agent', rh['user-agent']]);
+  if (rh['x-app']) apiHeaders.push(['x-app', rh['x-app']]);
+
+  const respH = req.responseHeaders || {};
+  if (respH['request-id']) apiHeaders.push(['request-id', respH['request-id']]);
+  if (respH['anthropic-organization-id']) apiHeaders.push(['organization-id', respH['anthropic-organization-id']]);
+  if (respH['x-envoy-upstream-service-time']) apiHeaders.push(['upstream-time', respH['x-envoy-upstream-service-time'] + 'ms']);
+
+  if (apiHeaders.length) {
+    html += `<div class="section"><div class="section-header" onclick="toggleSection(this)">API Info <span class="toggle">hide</span></div><div class="section-body"><div class="kv-grid">`;
+    for (const [k, v] of apiHeaders) {
+      html += `<div class="kv-key">${esc(k)}</div><div class="kv-val">${esc(String(v))}</div>`;
+    }
+    html += `</div></div></div>`;
+  }
+
+  // ── Beta features (parsed from anthropic-beta header) ──
+  if (rh['anthropic-beta']) {
+    const betas = rh['anthropic-beta'].split(',').map(s => s.trim());
+    html += `<div class="section"><div class="section-header" onclick="toggleSection(this)">Beta Features <span class="toggle">hide</span></div><div class="section-body" style="display: flex; flex-wrap: wrap; gap: 6px;">`;
+    for (const beta of betas) {
+      html += `<span style="font-family: var(--mono); font-size: 10px; padding: 3px 8px; background: var(--accent-dim); color: #c4b5fd; border-radius: 4px;">${esc(beta)}</span>`;
+    }
+    html += `</div></div>`;
+  }
+
+  // ── Token usage from message_delta SSE ──
+  const usageEvent = req.sseEvents?.find(e => e.type === 'message_delta');
+  const usage = usageEvent?.data?.usage;
+  if (usage) {
+    html += `<div class="section"><div class="section-header">Token Usage</div><div class="section-body"><div class="kv-grid">`;
+    for (const [k, v] of Object.entries(usage)) {
+      const uDisp = (typeof v === 'object' && v !== null) ? JSON.stringify(v) : String(v);
+      html += `<div class="kv-key">${esc(k)}</div><div class="kv-val" style="color: var(--orange); font-weight: 700">${esc(uDisp)}</div>`;
+    }
+    html += `</div></div></div>`;
+  }
+
+  // ── Response metadata from SSE (message_start + message_delta) ──
+  const startEvent = req.sseEvents?.find(e => e.type === 'message_start');
+  const deltaEvent = req.sseEvents?.find(e => e.type === 'message_delta');
+  if (startEvent?.data?.message || deltaEvent?.data) {
+    html += `<div class="section"><div class="section-header" onclick="toggleSection(this)">Response Metadata (from SSE) <span class="toggle">hide</span></div><div class="section-body"><div class="kv-grid">`;
+    const m = startEvent?.data?.message;
+    if (m) {
+      if (m.id) html += `<div class="kv-key">Message ID</div><div class="kv-val">${esc(m.id)}</div>`;
+      if (m.model) html += `<div class="kv-key">Model</div><div class="kv-val">${esc(m.model)}</div>`;
+      if (m.role) html += `<div class="kv-key">Role</div><div class="kv-val">${esc(m.role)}</div>`;
+      if (m.usage) {
+        for (const [k, v] of Object.entries(m.usage)) {
+          const display = (typeof v === 'object' && v !== null) ? JSON.stringify(v) : String(v);
+          html += `<div class="kv-key">initial.${k}</div><div class="kv-val" style="color: var(--orange)">${esc(display)}</div>`;
+        }
+      }
+    }
+    const d = deltaEvent?.data;
+    if (d?.delta?.stop_reason) html += `<div class="kv-key">Stop Reason</div><div class="kv-val" style="color: var(--accent); font-weight: 700">${esc(d.delta.stop_reason)}</div>`;
+    if (d?.delta?.stop_sequence !== undefined) html += `<div class="kv-key">Stop Sequence</div><div class="kv-val">${d.delta.stop_sequence === null ? 'null' : esc(String(d.delta.stop_sequence))}</div>`;
+    if (d?.context_management) {
+      html += `<div class="kv-key">Context Mgmt (response)</div><div class="kv-val">${esc(JSON.stringify(d.context_management))}</div>`;
+    }
+    html += `</div></div></div>`;
+  }
+
+  // ── Non-streaming response body ──
+  if (req.responseBody && typeof req.responseBody === 'object') {
+    html += `<div class="section"><div class="section-header" onclick="toggleSection(this)">Response Body <span class="toggle">click to toggle</span></div><div class="section-body"><div class="json-block">${syntaxHighlight(req.responseBody)}</div></div></div>`;
+  }
+
+  return html;
+}
+
+// ─── Tab: Conversation ──────────────────────────────────────────────
+function renderConversation(req) {
+  if (!req.messages?.length) return '<div class="empty-state">No messages in this request</div>';
+
+  let html = '';
+  for (const msg of req.messages) {
+    const role = msg.role;
+    html += `<div class="message ${role}">`;
+    html += `<div class="message-header"><span>${role.toUpperCase()}</span></div>`;
+
+    if (typeof msg.content === 'string') {
+      html += `<div class="message-body">${esc(msg.content)}</div>`;
+    } else if (Array.isArray(msg.content)) {
+      html += `<div class="message-body">`;
+      for (const block of msg.content) {
+        html += renderContentBlock(block);
+      }
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+
+  // Also show assistant response from SSE events if available
+  const { blocks: assistantBlocks } = buildAssistantFromSSE(req);
+  if (assistantBlocks.length > 0) {
+    html += `<div class="message assistant">`;
+    html += `<div class="message-header"><span>ASSISTANT (streamed response)</span>${req.streaming ? '<div class="thinking-indicator"><div class="thinking-dots"><span></span><span></span><span></span></div> streaming</div>' : ''}</div>`;
+    html += `<div class="message-body">`;
+    for (const block of assistantBlocks) {
+      // Convert aggregated format back to renderContentBlock format
+      const compat = { type: block.type };
+      if (block.type === 'text') compat.text = block.text;
+      else if (block.type === 'thinking') compat.thinking = block.thinking;
+      else if (block.type === 'tool_use') { compat.name = block.toolName; compat.input = block.input || block.rawJson; }
+      html += renderContentBlock(compat);
+    }
+    html += `</div></div>`;
+  }
+
+  return html;
+}
+
+function buildAssistantFromSSE(req) {
+  if (!req.sseEvents?.length) return { blocks: [], meta: {} };
+  const blocks = [];
+  let currentBlock = null;
+  let meta = { stopReason: null, usage: null, messageId: null, model: null };
+
+  for (const ev of req.sseEvents) {
+    if (ev.type === 'message_start') {
+      const m = ev.data?.message;
+      if (m) {
+        meta.messageId = m.id;
+        meta.model = m.model;
+        if (m.usage) meta.usage = { ...m.usage };
+      }
+    } else if (ev.type === 'content_block_start') {
+      const cb = ev.data?.content_block || {};
+      currentBlock = {
+        type: cb.type,
+        index: ev.data?.index,
+        // For tool_use: keep id, name, caller
+        id: cb.id || null,
+        name: cb.name || null,
+        caller: cb.caller || null,
+        // Accumulation buffers
+        _textBuf: '',
+        _jsonBuf: '',
+        _sigBuf: cb.signature || '',
+      };
+    } else if (ev.type === 'content_block_delta') {
+      if (!currentBlock) continue;
+      const delta = ev.data?.delta;
+      if (!delta) continue;
+      if (delta.type === 'text_delta') currentBlock._textBuf += delta.text;
+      else if (delta.type === 'thinking_delta') currentBlock._textBuf += delta.thinking;
+      else if (delta.type === 'input_json_delta') currentBlock._jsonBuf += delta.partial_json;
+      else if (delta.type === 'signature_delta') currentBlock._sigBuf += delta.signature;
+    } else if (ev.type === 'content_block_stop') {
+      if (currentBlock) {
+        blocks.push(finalizeBlock(currentBlock, false));
+        currentBlock = null;
+      }
+    } else if (ev.type === 'message_delta') {
+      const d = ev.data;
+      if (d?.delta?.stop_reason) meta.stopReason = d.delta.stop_reason;
+      if (d?.usage) meta.usage = { ...(meta.usage || {}), ...d.usage };
+    }
+  }
+  // If still streaming, push partial block
+  if (currentBlock) blocks.push(finalizeBlock(currentBlock, true));
+
+  return { blocks, meta };
+}
+
+function finalizeBlock(raw, streaming) {
+  const block = {
+    type: raw.type,
+    index: raw.index,
+    streaming,
+  };
+
+  if (raw.type === 'thinking') {
+    block.thinking = raw._textBuf;
+    block.signature = raw._sigBuf || null;
+  } else if (raw.type === 'text') {
+    block.text = raw._textBuf;
+  } else if (raw.type === 'tool_use') {
+    block.toolId = raw.id;
+    block.toolName = raw.name;
+    block.caller = raw.caller;
+    // Try to parse accumulated JSON
+    let parsedInput = null;
+    try { parsedInput = JSON.parse(raw._jsonBuf); } catch {}
+    block.input = parsedInput;
+    block.rawJson = raw._jsonBuf;
+  }
+  return block;
+}
+
+// Look up tool description from the request's tools array
+function getToolDescription(req, toolName) {
+  if (!req.tools || !toolName) return null;
+  const tool = req.tools.find(t => t.name === toolName);
+  return tool?.description || null;
+}
+
+function renderContentBlock(block) {
+  if (!block) return '';
+  const type = block.type;
+
+  if (type === 'text') {
+    return `<div class="content-block"><div class="cb-header text">Text</div><div class="cb-body">${esc(block.text || block.content || '')}</div></div>`;
+  }
+  if (type === 'thinking') {
+    const text = block.thinking || block.content || '';
+    return `<div class="content-block"><div class="cb-header thinking">Thinking${block.budget_tokens ? ' (budget: ' + block.budget_tokens + ')' : ''}</div><div class="cb-body" style="color: var(--orange)">${esc(text)}</div></div>`;
+  }
+  if (type === 'tool_use') {
+    return `<div class="content-block"><div class="cb-header tool_use">Tool Use: ${esc(block.name || '')}</div><div class="cb-body"><div class="json-block">${syntaxHighlight(block.input || block.content || '')}</div></div></div>`;
+  }
+  if (type === 'tool_result') {
+    const content = typeof block.content === 'string' ? block.content : JSON.stringify(block.content, null, 2);
+    return `<div class="content-block"><div class="cb-header tool_result">Tool Result (${block.tool_use_id || '?'})${block.is_error ? ' - ERROR' : ''}</div><div class="cb-body">${esc(content)}</div></div>`;
+  }
+  if (type === 'image') {
+    return `<div class="content-block"><div class="cb-header">Image (${block.source?.media_type || 'unknown'})</div><div class="cb-body" style="color: var(--text-dim)">[Image data - ${block.source?.type || 'base64'}]</div></div>`;
+  }
+  // Fallback
+  return `<div class="content-block"><div class="cb-header">${type || 'unknown'}</div><div class="cb-body"><div class="json-block">${syntaxHighlight(block)}</div></div></div>`;
+}
+
+// ─── Tab: Response (aggregated, rendered) ───────────────────────────
+function renderResponse(req) {
+  const { blocks, meta } = buildAssistantFromSSE(req);
+
+  if (!blocks.length && !req.responseBody) {
+    if (req.streaming) return '<div class="empty-state"><div class="thinking-indicator"><div class="thinking-dots"><span></span><span></span><span></span></div> Streaming...</div></div>';
+    return '<div class="empty-state">No response data</div>';
+  }
+
+  let html = '';
+
+  // ── Meta bar: model, message id, stop reason ──
+  html += '<div class="resp-meta-row" style="margin-bottom: 14px;">';
+  if (meta.model) html += `<span style="font-family: var(--mono); font-size: 12px; color: var(--cyan); font-weight: 700;">${esc(meta.model)}</span>`;
+  if (meta.messageId) html += `<span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">${esc(meta.messageId)}</span>`;
+  if (meta.stopReason) html += `<span class="resp-stop-reason">stop: ${esc(meta.stopReason)}</span>`;
+  if (req.streaming) html += `<div class="thinking-indicator"><div class="thinking-dots"><span></span><span></span><span></span></div> streaming</div>`;
+  html += '</div>';
+
+  // ── Usage chips ──
+  if (meta.usage) {
+    html += '<div class="resp-usage-bar" style="margin-bottom: 14px;">';
+    const labels = {
+      input_tokens: 'Input',
+      output_tokens: 'Output',
+      cache_creation_input_tokens: 'Cache Write',
+      cache_read_input_tokens: 'Cache Read',
+    };
+    for (const [key, label] of Object.entries(labels)) {
+      if (meta.usage[key] !== undefined) {
+        html += `<div class="usage-chip">
+          <div class="usage-chip-label">${label}</div>
+          <div class="usage-chip-value">${meta.usage[key].toLocaleString()}</div>
+        </div>`;
+      }
+    }
+    html += '</div>';
+  }
+
+  // ── Content blocks ──
+  html += '<div class="rendered-response">';
+
+  for (const block of blocks) {
+    html += '<div class="resp-block">';
+
+    if (block.type === 'thinking') {
+      const charCount = block.thinking?.length || 0;
+      html += `<div class="resp-block-header type-thinking" onclick="this.nextElementSibling.classList.toggle('collapsed')">
+        <span>Thinking</span>
+        <span style="display: flex; gap: 8px; align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">${charCount.toLocaleString()} chars</span>
+          <span class="block-index">#${block.index}</span>
+          ${block.streaming ? '<span style="color: var(--orange);">streaming...</span>' : ''}
+        </span>
+      </div>`;
+      html += `<div class="resp-block-body resp-thinking-body">${esc(block.thinking || '')}</div>`;
+
+    } else if (block.type === 'text') {
+      html += `<div class="resp-block-header type-text" onclick="this.nextElementSibling.classList.toggle('collapsed')">
+        <span>Text Response</span>
+        <span style="display: flex; gap: 8px; align-items: center;">
+          <span class="block-index">#${block.index}</span>
+          ${block.streaming ? '<span style="color: var(--green);">streaming...</span>' : ''}
+        </span>
+      </div>`;
+      html += `<div class="resp-block-body resp-text-body">${esc(block.text || '')}</div>`;
+
+    } else if (block.type === 'tool_use') {
+      const desc = getToolDescription(req, block.toolName);
+      // Shorten the description for display
+      const shortDesc = desc ? (desc.length > 200 ? desc.slice(0, 200) + '...' : desc) : null;
+
+      html += `<div class="resp-block-header type-tool_use">
+        <span>Tool Call</span>
+        <span style="display: flex; gap: 8px; align-items: center;">
+          <span class="block-index">#${block.index}</span>
+          ${block.streaming ? '<span style="color: var(--pink);">streaming...</span>' : ''}
+        </span>
+      </div>`;
+      html += `<div class="resp-block-body resp-tool-body">`;
+
+      // Tool header with name and id
+      html += `<div class="tool-call-header">
+        <span class="tool-call-name">${esc(block.toolName || 'unknown')}</span>
+        <span class="tool-call-id">${esc(block.toolId || '')}</span>
+        ${block.caller ? `<span style="font-size: 9px; color: var(--text-dim); font-family: var(--mono);">caller: ${esc(block.caller.type || '')}</span>` : ''}
+      </div>`;
+
+      // Tool description
+      if (shortDesc) {
+        html += `<div class="tool-call-desc"><div class="md-rendered" style="font-size: 11px;">${renderMarkdown(shortDesc)}</div></div>`;
+      }
+
+      // Tool input - rendered as pretty JSON or raw string
+      html += `<div class="tool-call-input">`;
+      html += `<div class="tool-call-input-label">Input</div>`;
+      if (block.input) {
+        html += `<div class="json-block">${syntaxHighlight(block.input)}</div>`;
+      } else if (block.rawJson) {
+        html += `<div class="json-block" style="color: var(--text-dim)">${esc(block.rawJson)}${block.streaming ? '<span style="color: var(--pink)">|</span>' : ''}</div>`;
+      } else {
+        html += `<div style="color: var(--text-dim); font-size: 11px;">No input / empty</div>`;
+      }
+      html += `</div></div>`;
+
+    } else {
+      // Unknown block type
+      html += `<div class="resp-block-header" style="color: var(--text-dim);">
+        <span>${esc(block.type || 'unknown')}</span>
+        <span class="block-index">#${block.index}</span>
+      </div>`;
+      html += `<div class="resp-block-body"><div class="json-block">${syntaxHighlight(block)}</div></div>`;
+    }
+
+    html += '</div>'; // close resp-block
+  }
+
+  html += '</div>'; // close rendered-response
+  return html;
+}
+
+// ─── Tab: System ────────────────────────────────────────────────────
+function renderSystem(req) {
+  if (!req.system) return '<div class="empty-state">No system prompt</div>';
+
+  const parts = Array.isArray(req.system) ? req.system : [{ type: 'text', text: req.system }];
+  let html = '';
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    const hasCache = part.cache_control;
+    html += `<div class="system-part">`;
+    html += `<div class="system-part-label">
+      <span>Part ${i + 1} / ${parts.length} (${part.type || 'text'})</span>
+      ${hasCache ? '<span class="cache-badge">cached: ' + (part.cache_control.ttl || 'ephemeral') + '</span>' : ''}
+    </div>`;
+    html += `<div class="system-block">${esc(part.text || JSON.stringify(part, null, 2))}</div>`;
+    html += `</div>`;
+  }
+
+  return html;
+}
+
+// ─── Tab: Tools ─────────────────────────────────────────────────────
+function renderTools(req) {
+  if (!req.tools?.length) return '<div class="empty-state">No tools</div>';
+
+  // Categorize tools
+  const groups = {};
+  for (const t of req.tools) {
+    let group;
+    if (t.name.startsWith('mcp__')) {
+      // Extract MCP server name: mcp__server-name__tool -> "server-name"
+      const parts = t.name.split('__');
+      group = 'mcp: ' + (parts[1] || 'unknown');
+    } else {
+      group = 'built-in';
+    }
+    if (!groups[group]) groups[group] = [];
+    groups[group].push(t);
+  }
+
+  // Sort: built-in first, then MCP groups alphabetically
+  const sortedGroups = Object.entries(groups).sort((a, b) => {
+    if (a[0] === 'built-in') return -1;
+    if (b[0] === 'built-in') return 1;
+    return a[0].localeCompare(b[0]);
+  });
+
+  let html = '<div class="tools-container">';
+
+  for (const [groupName, tools] of sortedGroups) {
+    html += `<div class="tools-group-header">
+      <span>${esc(groupName)}</span>
+      <span class="group-count">${tools.length}</span>
+    </div>`;
+
+    for (let i = 0; i < tools.length; i++) {
+      const t = tools[i];
+      const isMcp = t.name.startsWith('mcp__');
+      const shortName = isMcp ? t.name.split('__').pop() : t.name;
+      const oneliner = (t.description || '').split('\n')[0].slice(0, 120);
+      const toolIdx = req.tools.indexOf(t);
+
+      html += `<div class="tool-item ${isMcp ? 'mcp-tool' : ''}" id="tool-${toolIdx}">
+        <div class="tool-item-header" onclick="toggleTool(${toolIdx})">
+          <div class="tool-item-icon ${isMcp ? 'mcp' : 'builtin'}">${isMcp ? 'M' : shortName[0]?.toUpperCase()}</div>
+          <div class="tool-item-info">
+            <div class="tool-item-name" title="${esc(t.name)}">${esc(shortName)}</div>
+            <div class="tool-item-oneliner">${esc(oneliner)}</div>
+          </div>
+          <div class="tool-item-chevron">&#9654;</div>
+        </div>
+        <div class="tool-item-detail">
+          <div class="tool-detail-tabs">
+            <div class="tool-detail-tab active" onclick="switchToolTab(${toolIdx}, 'desc', event)">Description</div>
+            <div class="tool-detail-tab" onclick="switchToolTab(${toolIdx}, 'params', event)">Parameters</div>
+            <div class="tool-detail-tab" onclick="switchToolTab(${toolIdx}, 'schema', event)">Raw Schema</div>
+          </div>
+          <div class="tool-detail-body" id="tool-body-${toolIdx}">
+            ${renderToolDesc(t)}
+          </div>
+        </div>
+      </div>`;
+    }
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function toggleTool(idx) {
+  const el = document.getElementById('tool-' + idx);
+  if (el) el.classList.toggle('open');
+}
+
+function switchToolTab(idx, tab, event) {
+  event.stopPropagation();
+  const detail = document.getElementById('tool-' + idx)?.querySelector('.tool-item-detail');
+  if (!detail) return;
+  // Update tab active state
+  detail.querySelectorAll('.tool-detail-tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  // Render body
+  const body = document.getElementById('tool-body-' + idx);
+  const req = state.requests.get(state.selectedId);
+  if (!req?.tools?.[idx]) return;
+  const t = req.tools[idx];
+  if (tab === 'desc') body.innerHTML = renderToolDesc(t);
+  else if (tab === 'params') body.innerHTML = renderToolParams(t);
+  else if (tab === 'schema') body.innerHTML = `<div class="json-block">${syntaxHighlight(t.input_schema || {})}</div>`;
+}
+
+function renderToolDesc(t) {
+  if (!t.description) return '<div style="color: var(--text-dim)">No description</div>';
+  return `<div class="md-rendered">${renderMarkdown(t.description)}</div>`;
+}
+
+function renderToolParams(t) {
+  const schema = t.input_schema;
+  if (!schema?.properties || Object.keys(schema.properties).length === 0) {
+    return '<div style="color: var(--text-dim)">No parameters</div>';
+  }
+  const required = new Set(schema.required || []);
+  let html = '<table class="tool-param-table"><thead><tr><th>Name</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>';
+  for (const [name, prop] of Object.entries(schema.properties)) {
+    const type = Array.isArray(prop.type) ? prop.type.join(' | ') : (prop.type || '?');
+    const isReq = required.has(name);
+    const desc = prop.description || '';
+    let enumStr = '';
+    if (prop.enum) enumStr = `<br><span style="color: var(--accent); font-size: 10px;">enum: ${esc(prop.enum.join(', '))}</span>`;
+    html += `<tr>
+      <td class="param-name">${esc(name)}</td>
+      <td class="param-type">${esc(type)}</td>
+      <td>${isReq ? '<span class="param-req">YES</span>' : '<span style="color: var(--text-dim)">no</span>'}</td>
+      <td class="param-desc">${esc(desc)}${enumStr}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  return html;
+}
+
+// ── Lightweight markdown renderer ───────────────────────────────────
+function renderMarkdown(text) {
+  // Escape HTML first
+  let html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // Code blocks (``` ... ```)
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+    return `<pre><code>${code.trim()}</code></pre>`;
+  });
+
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  // Headers
+  html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+
+  // Horizontal rules
+  html = html.replace(/^---+$/gm, '<hr>');
+
+  // Bold & italic
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+  // Blockquotes
+  html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+
+  // Unordered lists: collect consecutive lines starting with "- " or "* "
+  html = html.replace(/(?:^[ ]*[-*] .+$\n?)+/gm, (match) => {
+    const items = match.trim().split('\n').map(line => {
+      const content = line.replace(/^[ ]*[-*] /, '');
+      return `<li>${content}</li>`;
+    }).join('');
+    return `<ul>${items}</ul>`;
+  });
+
+  // Ordered lists
+  html = html.replace(/(?:^\d+\. .+$\n?)+/gm, (match) => {
+    const items = match.trim().split('\n').map(line => {
+      const content = line.replace(/^\d+\. /, '');
+      return `<li>${content}</li>`;
+    }).join('');
+    return `<ol>${items}</ol>`;
+  });
+
+  // Links
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+
+  // Paragraphs: wrap lines that aren't already wrapped in block elements
+  // Split by double newlines, wrap bare text in <p>
+  html = html.split(/\n{2,}/).map(block => {
+    block = block.trim();
+    if (!block) return '';
+    if (/^<(h[1-4]|ul|ol|pre|blockquote|hr|p|div|table)/.test(block)) return block;
+    return `<p>${block}</p>`;
+  }).join('\n');
+
+  // Single newlines within paragraphs become <br>
+  html = html.replace(/(<p>[\s\S]*?<\/p>)/g, (match) => {
+    return match.replace(/\n/g, '<br>');
+  });
+
+  return html;
+}
+
+// ─── Tab: SSE Stream ────────────────────────────────────────────────
+function renderStream(req) {
+  if (!req.sseEvents?.length) {
+    if (req.streaming) return '<div class="empty-state"><div class="thinking-indicator"><div class="thinking-dots"><span></span><span></span><span></span></div> Waiting for events...</div></div>';
+    return '<div class="empty-state">No SSE events</div>';
+  }
+
+  let html = '<div id="sseContainer">';
+  for (const ev of req.sseEvents) {
+    html += renderSseEventHtml(ev);
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderSseEventHtml(ev) {
+  const dataStr = typeof ev.data === 'string' ? ev.data : JSON.stringify(ev.data, null, 2);
+  const truncated = dataStr.length > 300 ? dataStr.slice(0, 300) + '...' : dataStr;
+  return `<div class="sse-event" onclick="this.classList.toggle('expanded')">
+    <span class="sse-type ${ev.type}">${ev.type}</span>
+    <span class="sse-data">${esc(truncated)}</span>
+  </div>`;
+}
+
+function appendSseEvent(ev) {
+  const container = document.getElementById('sseContainer');
+  if (!container) return;
+  container.insertAdjacentHTML('beforeend', renderSseEventHtml(ev));
+  container.parentElement.scrollTop = container.parentElement.scrollHeight;
+}
+
+// ─── Tab: Headers ───────────────────────────────────────────────────
+function renderHeaders(req) {
+  let html = `<div class="section"><div class="section-header">Request Headers</div><div class="section-body"><div class="kv-grid">`;
+  if (req.requestHeaders) {
+    for (const [k, v] of Object.entries(req.requestHeaders)) {
+      html += `<div class="kv-key">${esc(k)}</div><div class="kv-val">${esc(String(v))}</div>`;
+    }
+  }
+  html += `</div></div></div>`;
+
+  html += `<div class="section"><div class="section-header">Response Headers</div><div class="section-body"><div class="kv-grid">`;
+  if (req.responseHeaders) {
+    for (const [k, v] of Object.entries(req.responseHeaders)) {
+      html += `<div class="kv-key">${esc(k)}</div><div class="kv-val">${esc(String(v))}</div>`;
+    }
+  } else {
+    html += `<div class="kv-key" style="grid-column: 1/-1; text-align: left; color: var(--text-dim)">Awaiting response...</div>`;
+  }
+  html += `</div></div></div>`;
+
+  return html;
+}
+
+// ─── Tab: Rate Limits ───────────────────────────────────────────────
+function renderRateLimits(req) {
+  if (!req.rateLimits || !Object.keys(req.rateLimits).length) return '<div class="empty-state">No rate limit info</div>';
+
+  let html = '<div class="rate-grid">';
+  for (const [key, val] of Object.entries(req.rateLimits)) {
+    const isUtil = key.includes('utilization');
+    const num = parseFloat(val);
+    const pct = isUtil ? Math.round(num * 100) : null;
+    const barColor = pct !== null ? (pct > 80 ? 'var(--red)' : pct > 50 ? 'var(--yellow)' : 'var(--green)') : null;
+
+    html += `<div class="rate-card">
+      <div class="rate-label">${esc(key)}</div>
+      <div class="rate-value" style="color: ${pct !== null && pct > 80 ? 'var(--red)' : 'var(--text)'}">${esc(String(val))}${pct !== null ? ' (' + pct + '%)' : ''}</div>
+      ${pct !== null ? `<div class="rate-bar"><div class="rate-bar-fill" style="width: ${pct}%; background: ${barColor}"></div></div>` : ''}
+    </div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+// ─── Tab: Raw ───────────────────────────────────────────────────────
+function renderRaw(req) {
+  // Show full request body and response body as pretty JSON
+  let html = `<div class="section"><div class="section-header" onclick="toggleSection(this)">Full Request Body <span class="toggle">toggle</span></div><div class="section-body"><div class="json-block">${syntaxHighlight(req.requestBody || req)}</div></div></div>`;
+
+  if (req.responseBody) {
+    html += `<div class="section"><div class="section-header" onclick="toggleSection(this)">Full Response Body <span class="toggle">toggle</span></div><div class="section-body"><div class="json-block">${syntaxHighlight(req.responseBody)}</div></div></div>`;
+  }
+
+  return html;
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function syntaxHighlight(obj) {
+  if (typeof obj === 'string') {
+    try { obj = JSON.parse(obj); } catch { return esc(obj); }
+  }
+  const json = JSON.stringify(obj, null, 2);
+  if (!json) return '';
+  return json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"([^"]+)"(?=\s*:)/g, '<span class="json-key">"$1"</span>')
+    .replace(/:\s*"([^"]*?)"/g, ': <span class="json-string">"$1"</span>')
+    .replace(/:\s*(\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
+    .replace(/:\s*(true|false)/g, ': <span class="json-bool">$1</span>')
+    .replace(/:\s*(null)/g, ': <span class="json-null">$1</span>');
+}
+
+function toggleSection(header) {
+  const body = header.nextElementSibling;
+  body.classList.toggle('collapsed');
+  header.querySelector('.toggle').textContent = body.classList.contains('collapsed') ? 'show' : 'hide';
+}
+
+function updateStats() {
+  document.getElementById('statEvents').textContent = state.totalEvents;
+  const uptime = Math.floor((Date.now() - state.startTime) / 1000);
+  const m = Math.floor(uptime / 60);
+  const s = uptime % 60;
+  document.getElementById('statUptime').textContent = m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+setInterval(updateStats, 1000);
+
+// ─── Boot ───────────────────────────────────────────────────────────
+connectWs();
+</script>
+</body>
+</html>

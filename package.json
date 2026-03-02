@@ -1,0 +1,44 @@
+{
+  "name": "claude-intercept",
+  "version": "1.0.0",
+  "description": "Intercept, inspect, and debug all API traffic between Claude Code and the Anthropic API — with a real-time web dashboard.",
+  "type": "module",
+  "main": "intercept.mjs",
+  "bin": {
+    "claude-intercept": "intercept.mjs"
+  },
+  "scripts": {
+    "start": "node intercept.mjs"
+  },
+  "keywords": [
+    "claude",
+    "anthropic",
+    "proxy",
+    "interceptor",
+    "debugger",
+    "api",
+    "dashboard",
+    "claude-code",
+    "network",
+    "inspector"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fahd09/claude-intercept.git"
+  },
+  "homepage": "https://github.com/fahd09/claude-intercept",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "intercept.mjs",
+    "dashboard.html",
+    "LICENSE",
+    "README.md"
+  ],
+  "dependencies": {
+    "ws": "^8.19.0"
+  }
+}
