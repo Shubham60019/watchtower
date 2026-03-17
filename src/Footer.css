@@ -1,0 +1,92 @@
+.mainfooter{
+    margin: 0;
+    padding: 0;
+    color: white;
+    background-color: #172337;
+}
+.footer{
+    display: flex;
+    justify-content: space-evenly;
+    height: 400px;
+    background-color: #172337;
+    color: #878787;
+}
+.foot{
+    position: relative;
+    top: 40px;
+    right: 100px;
+    display: flex;
+    list-style: none;
+}
+.about{
+    position: relative;
+    top: 20px;
+    right: 33px;
+    list-style: none;
+    color: white;
+    font-size: 13px;
+}
+.help{
+    position: relative;
+    top: 20px;
+    right: 33px;
+    list-style: none;
+    color: white;
+    font-size: 13px;
+}
+.consumer{
+    position: relative;
+    top: 20px;
+    right: 53px;
+    list-style: none;
+    color: white;
+    font-size: 13px;
+}
+.social{
+    position: relative;
+    top: 20px;
+    right: 33px;
+    list-style: none;
+    color: white;
+    font-size: 13px;
+}
+.detail{
+    position: relative;
+    top: 40px;
+    display: flex;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    width: 35%;
+}
+.para1{
+    position: relative;
+    top: 20px;
+    color: white;
+    font-size: 12px;
+    right: 10px;
+}
+.para2{
+    position: relative;
+    top: 20px;
+    right: 20px;
+    color: white;
+    font-size: 12px;
+}
+.detail1{
+    position: relative;
+    right: 50px;
+}
+.hr{
+    position: relative;
+    bottom: 98px;
+}
+.bottom{
+    position: relative;
+    bottom: 88px;
+    display: flex;
+    justify-content: space-evenly;
+    list-style: none;
+    font-weight: bold;
+    font-size: 14px;
+}

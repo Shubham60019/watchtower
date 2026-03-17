@@ -1,0 +1,83 @@
+#nav{
+    display: flex;
+    justify-content: space-between;
+    height: 55px;
+    width: 100%;
+    background-color: #2874f0;
+    align-items: center;
+}
+.logo{
+    position: relative;
+    left: 190px;
+    top: 3px;
+}
+.expo{
+    position: relative;
+    color: white;
+    left: 190px;
+}
+.explore{
+    position: relative;
+    bottom: 6px;
+    font-size: 11px;
+    width: 40px;
+}
+.plus{
+    position: relative;
+    bottom: 6px;
+    color: #ffe500;
+    font-size: 11px;
+}
+.plus1{
+    position: relative;
+    bottom: 6px;
+   left: 2px;
+}
+.search{
+    position: relative;
+    height: 35px;
+    width: 430px;
+    left: 90px;
+    border: none;
+    font-size: 14px;
+}
+.searchIcon{
+    position: relative;
+    color: #2874f0 ;
+    z-index: 9;
+    left: 60px;
+}
+.btn{
+    position: relative;
+    background-color: white;
+    color: #2874f0 ;
+    height: 30px;
+    width: 120px;
+    border: none;
+    right: 38px;
+    border-radius: 0;
+}
+.login{
+    position: relative;
+    align-items: center;
+    text-align: center;
+    bottom: 4px;
+}
+.list{
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    list-style: none;
+    color: white;
+    font-weight: bold;
+    width: 350px;
+    top: 7px;
+    font-size: 15px;
+    right: 150px;
+}
+#more{
+    border: none;
+    background-color: #2874f0;
+    color: white;
+    font-weight: bold;
+}

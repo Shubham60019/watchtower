@@ -1,0 +1,31 @@
+.content{
+    display: flex;
+    justify-content: center;
+    height: 300px;
+    width: 100%;
+    align-items: center;
+}
+.items{
+    display: block;
+    justify-content: center;
+    align-items: center;
+    height: 280px;
+    width: 220px;
+}
+.inside{
+    height: 180px;
+    width: 200px;
+}
+.texts{
+    height: 85px;
+    width: 200px;
+}
+.offer{
+    color: green;
+    font-size: 15px;
+}
+.itemDetail{
+    position: relative;
+    color: gray;
+    bottom: 15px;
+}

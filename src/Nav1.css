@@ -1,0 +1,16 @@
+.list1{
+    list-style: none;
+    display: flex;
+    justify-content: space-around;
+    text-align: center;
+    align-items: center;
+    font-size: 13px;
+    font-weight: bold;
+}
+.pics{
+    display: block;
+    /* text-align: center;
+    align-items: center;
+    font-size: 10px;
+    font-weight: bold; */
+}
